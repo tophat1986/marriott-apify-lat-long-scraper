@@ -12,10 +12,16 @@ await Actor.init();
 
 // Define the URL to start the crawler with - get it from the input of the Actor.
 const input = await Actor.getInput();
-if (!input?.url) {
-    throw new Error('Input must be an object with a "url" string property.');
+let url = null;
+if (input?.url) {
+    url = input.url;
+} else if (Array.isArray(input?.startUrls) && input.startUrls.length > 0 && input.startUrls[0].url) {
+    url = input.startUrls[0].url;
 }
-const startUrls = [{ url: input.url }];
+if (!url) {
+    throw new Error('Input must have a "url" string property or a "startUrls" array with at least one object containing a "url".');
+}
+const startUrls = [{ url }];
 
 // Create a proxy configuration that will rotate proxies from Apify Proxy.
 const proxyConfiguration = await Actor.createProxyConfiguration();
