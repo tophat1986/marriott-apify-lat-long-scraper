@@ -30,16 +30,17 @@ const proxyConfiguration = await Actor.createProxyConfiguration();
 const crawler = new PuppeteerCrawler({
     proxyConfiguration,
     requestHandler: router,
-    maxRequestsPerCrawl: 1, // We only need to visit one page
-    navigationTimeoutSecs: 120, // Give more time for the page to load all content
+    maxRequestsPerCrawl: 1,
+    navigationTimeoutSecs: 30, // Reduced from 120 to 30 seconds
+    maxRequestRetries: 1,      // Only 1 retry (2 attempts total)
     launchContext: {
         launchOptions: {
             headless: true,
             args: [
-                '--disable-gpu', // Mitigates the "crashing GPU process" issue in Docker containers
-                '--no-sandbox', // Mitigates the "sandboxed" process issue in Docker containers
+                '--disable-gpu',
+                '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // Overcome limited resource problems
+                '--disable-dev-shm-usage',
             ],
         },
     },

@@ -5,7 +5,7 @@ export const router = createPuppeteerRouter();
 router.addDefaultHandler(async ({ page, request, log }) => {
     log.info(`Navigating to hotel page: ${request.url}`);
     try {
-        await page.goto(request.url, { waitUntil: 'networkidle0', timeout: 120000 });
+        await page.goto(request.url, { waitUntil: 'networkidle0', timeout: 30000 }); // 30 seconds
     } catch (err) {
         log.error(`Failed to navigate: ${err.message}`);
         return;
