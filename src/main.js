@@ -10,9 +10,12 @@ import { router } from './routes.js';
 // The init() call configures the Actor for its environment. It's recommended to start every Actor with an init().
 await Actor.init();
 
-// Define the URLs to start the crawler with - get them from the input of the Actor or use a default list.
+// Define the URL to start the crawler with - get it from the input of the Actor.
 const input = await Actor.getInput();
-const startUrls = input?.startUrls || [{ url: 'https://marriott-hotels.marriott.com/locations/' }];
+if (!input?.url) {
+    throw new Error('Input must be an object with a "url" string property.');
+}
+const startUrls = [{ url: input.url }];
 
 // Create a proxy configuration that will rotate proxies from Apify Proxy.
 const proxyConfiguration = await Actor.createProxyConfiguration();

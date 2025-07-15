@@ -1,6 +1,6 @@
 {
     "actorSpecification": 1,
-    "name": "marriott-hotel-directory-scraper",
+    "name": "marriott-apify-lat-long-scraper",
     "title": "Marriott Hotel Directory Scraper",
     "description": "Scrapes all Marriott hotels from their worldwide directory, extracting hotel names, URLs, locations, brands, and Marsha codes.",
     "version": "1.0",
