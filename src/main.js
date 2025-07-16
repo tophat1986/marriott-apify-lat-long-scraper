@@ -30,8 +30,7 @@ if (urls.length === 0 || urls.some(url => typeof url !== 'string' || !/^https?:\
 const maxConcurrency = Math.min(5, urls.length);
 
 const proxyConfiguration = await Actor.createProxyConfiguration({
-    groups: ['RESIDENTIAL'],
-    session: true
+    groups: ['RESIDENTIAL']
 });
 
 let failedCount = 0;
