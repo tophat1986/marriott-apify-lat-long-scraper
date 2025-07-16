@@ -9,6 +9,7 @@ import { router } from './routes.js';
 
 await Actor.init(); // Initialize Apify Actor before using any Actor methods
 
+const input = await Actor.getInput();
 log.info('Received input:', input);
 
 let urls = [];
