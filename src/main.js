@@ -7,6 +7,8 @@ import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { router } from './routes.js';
 
+await Actor.init(); // Initialize Apify Actor before using any Actor methods
+
 puppeteer.use(StealthPlugin());
 
 const input = await Actor.getInput();
