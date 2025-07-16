@@ -8,7 +8,7 @@ COPY --chown=myuser package*.json ./
 
 # Install prod deps
 RUN npm --quiet set progress=false \
-    && npm ci --omit=dev --omit=optional \
+    && npm ci --omit=dev \
     && echo "Installed NPM packages:" \
     && (npm list --omit=dev --all || true) \
     && echo "Node.js version:" && node --version \
