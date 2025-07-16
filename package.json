@@ -7,8 +7,8 @@
         "apify": "^3.4.3",
         "crawlee": "^3.13.10",
         "playwright": "^1.48.2",
-        "camoufox": "^0.1.7",        // CLI
-        "camoufox-js": "^0.3.5"      // JS helper (adjust to current if newer)
+        "camoufox": "^0.1.7",
+        "camoufox-js": "^0.3.5"
     },
     "devDependencies": {
       "@apify/eslint-config": "^1.0.0",
@@ -22,7 +22,8 @@
       "format:check": "prettier --check .",
       "lint": "eslint",
       "lint:fix": "eslint --fix",
-      "test": "echo \"Error: no tests yet\" && exit 1"
+      "test": "echo \"Error: no tests yet\" && exit 1",
+      "camoufox:fetch": "npx camoufox fetch"
     },
     "author": "It's not you it's me",
     "license": "ISC"

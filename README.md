@@ -54,3 +54,13 @@ If you're looking for examples or want to learn more visit:
 - A short guide on how to create Actors using code templates:
 
 [web scraper template](https://www.youtube.com/watch?v=u-i-Korzf8w)
+
+# Camoufox Setup
+
+This project uses [Camoufox](https://github.com/camoufox/camoufox) for stealth browser automation. Before running the scraper locally, you must fetch the Camoufox browser bundle:
+
+```
+npx camoufox fetch
+```
+
+This step is required only once per environment. The Dockerfile already includes this step for containerized runs.

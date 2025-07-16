@@ -6,6 +6,7 @@ import { Actor, log } from 'apify';
 import { PlaywrightCrawler, Dataset } from 'crawlee';
 import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
 import { firefox } from 'playwright';
+import fs from 'fs';
 
 // ---- helpers ----
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -51,14 +52,28 @@ const proxyConfiguration = await Actor.createProxyConfiguration({
 });
 
 // Camoufox launch opts (points to cache populated at build)
-// We pass a sticky proxy session for the whole run; if you want rotation,
-// refactor to call proxyConfiguration.newUrl() per request in preNav.
+const camoufoxVersionPath = `${process.env.HOME || process.env.USERPROFILE}/.cache/camoufox/version.json`;
+if (!fs.existsSync(camoufoxVersionPath)) {
+  log.error('Camoufox version info missing. Please run `npx camoufox fetch` before running this script.');
+  await Actor.exit();
+  process.exit(1);
+}
 const proxyUrl = await proxyConfiguration.newUrl();
-const camouLaunch = await camoufoxLaunchOptions({
-  headless: true,
-  proxy: proxyUrl,
-  geoip: true,
-});
+let camouLaunch;
+try {
+  camouLaunch = await camoufoxLaunchOptions({
+    headless: true,
+    proxy: proxyUrl,
+    geoip: true,
+  });
+} catch (e) {
+  if (e.message && e.message.includes('Version information not found')) {
+    log.error('Camoufox cache missing. Run `npx camoufox fetch`.');
+    await Actor.exit();
+    process.exit(1);
+  }
+  throw e;
+}
 
 // Build crawler
 const crawler = new PlaywrightCrawler({
