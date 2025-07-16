@@ -1,10 +1,9 @@
-# Known-good base you were using before
-FROM apify/actor-node-puppeteer-chrome:22-24.11.1
+FROM apify/actor-node-playwright:22
 
-# Show preinstalled libs (optional)
-RUN npm ls --depth=0 apify crawlee puppeteer || true
+# Inspect preinstalled libs (optional)
+RUN npm ls --depth=0 apify crawlee playwright || true
 
-# Copy package manifests first (for layer cache)
+# Copy manifests
 COPY --chown=myuser package*.json ./
 
 # Install prod deps
@@ -16,12 +15,8 @@ RUN npm --quiet set progress=false \
     && echo "NPM version:" && npm --version \
     && rm -r ~/.npm
 
-# Install Playwright browser binaries + any missing OS deps
-# (chromium only; reduces size vs full suite)
-RUN npx playwright install --with-deps chromium
-
 # Copy source
 COPY --chown=myuser . ./
 
-# Run
+# Start actor
 CMD npm start --silent
