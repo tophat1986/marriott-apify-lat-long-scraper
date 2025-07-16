@@ -1,19 +1,17 @@
+/**
+ * Marriott JSON-LD scraper (Camoufox + PlaywrightCrawler + Apify Proxy RESIDENTIAL).
+ * - Input: { startUrls: [{url: ...}, ...] }
+ * - Output rows: { url, finalUrl, scrapedAt, jsonLdData, hotelInfo, error }
+ */
+
 import { Actor, log } from 'apify';
 import { PlaywrightCrawler, Dataset } from 'crawlee';
+import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
+import { firefox } from 'playwright';
 
-// ---------- defaults ----------
-const DEF_CONCURRENCY = 3;
-const DEF_NAV_TIMEOUT_SECS = 35;
-const DEF_HANDLER_TIMEOUT_SECS = 10;
-const DEF_DELAY_MIN = 250;
-const DEF_DELAY_MAX = 900;
-
-// Single UA (good Chrome string)
-const USER_AGENT =
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-
-// ---------- helpers ----------
+// ------------------------------------------------------------------
+// Small helpers
+// ------------------------------------------------------------------
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rand = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
 
@@ -27,15 +25,18 @@ function pickHotelNode(blocks) {
   return null;
 }
 
-// ---------- main ----------
+// ------------------------------------------------------------------
+// Main
+// ------------------------------------------------------------------
 await Actor.init();
+
 const input = await Actor.getInput();
 log.info('input', input);
 
-// startUrls
+// Extract start URLs (support simple string array or array of {url})
 let startUrls = [];
 if (Array.isArray(input?.startUrls) && input.startUrls.length) {
-  startUrls = input.startUrls.map((r) => ({ url: r.url }));
+  startUrls = input.startUrls.map((r) => (typeof r === 'string' ? { url: r } : { url: r.url }));
 } else if (input?.url) {
   startUrls = [{ url: input.url }];
 }
@@ -45,49 +46,51 @@ if (!startUrls.length) {
   process.exit(0);
 }
 
-// knobs
-const concurrency = Number(input?.concurrency) || DEF_CONCURRENCY;
-const navigationTimeoutSecs = Number(input?.navigationTimeoutSecs) || DEF_NAV_TIMEOUT_SECS;
-const requestHandlerTimeoutSecs = Number(input?.requestHandlerTimeoutSecs) || DEF_HANDLER_TIMEOUT_SECS;
-const delayMsMin = Number(input?.delayMsMin) || DEF_DELAY_MIN;
-const delayMsMax = Number(input?.delayMsMax) || DEF_DELAY_MAX;
+// Scrape knobs (all optional)
+const concurrency = Number(input?.concurrency) || 3;
+const navigationTimeoutSecs = Number(input?.navigationTimeoutSecs) || 35;
+const requestHandlerTimeoutSecs = Number(input?.requestHandlerTimeoutSecs) || 10;
+const delayMsMin = Number(input?.delayMsMin) || 250;
+const delayMsMax = Number(input?.delayMsMax) || 900;
 
-// proxy
+// Proxy (RESIDENTIAL group recommended)
 const proxyConfiguration = await Actor.createProxyConfiguration({
   groups: ['RESIDENTIAL'],
+});
+
+// Camoufox launch options
+// Each crawler browser launch gets a fresh proxy session (newUrl()).
+// If you want sticky session across all requests, call newUrl() once and reuse (see comment below).
+const camouLaunch = await camoufoxLaunchOptions({
+  headless: true,
+  proxy: await proxyConfiguration.newUrl(), // sticky for whole run; change to newUrl() in preNav to rotate
+  geoip: true,
+  // fonts: ['Times New Roman'], // example custom Camoufox option
 });
 
 // Build crawler
 const crawler = new PlaywrightCrawler({
   proxyConfiguration,
-
-  // Set UA & headers at context creation (Playwright way)
+  // Camoufox runs via Playwright's firefox launcher
   launchContext: {
-    launchOptions: { headless: true }, // Chromium bundled in base image
-    contextOptions: {
-      userAgent: USER_AGENT,
-      locale: 'en-US',
-      extraHTTPHeaders: {
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.8',
-        Connection: 'keep-alive',
-      },
-    },
+    launcher: firefox,
+    launchOptions: camouLaunch, // stealth + proxy baked in
   },
 
   maxConcurrency: concurrency,
-  requestHandlerTimeoutSecs,
   navigationTimeoutSecs,
+  requestHandlerTimeoutSecs,
   maxRequestsPerCrawl: startUrls.length,
 
-  // Lightweight resource blocking to speed load
   preNavigationHooks: [
     async ({ page }, gotoOptions) => {
+      // Block heavy assets (keep scripts so JSON-LD loads)
       await page.route('**/*', (route) => {
         const type = route.request().resourceType();
-        if (['image', 'stylesheet', 'font', 'media'].includes(type)) {
+        if (['image', 'font', 'media'].includes(type)) {
           return route.abort();
         }
+        // keep stylesheets; Marriott sometimes gates JS behind CSS loads
         return route.continue();
       });
       gotoOptions.waitUntil = 'domcontentloaded';
@@ -98,24 +101,24 @@ const crawler = new PlaywrightCrawler({
     const origUrl = request.userData?.origUrl ?? request.url;
     const finalUrl = page.url();
 
-    // Wait briefly for JSON-LD
-    await page.waitForSelector('script[type="application/ld+json"]', { timeout: 5000 }).catch(() => {});
+    // Wait flexibly in case JSON-LD injected late
+    await page.waitForSelector('script[type="application/ld+json"]', { timeout: 8000 }).catch(() => {});
 
     const jsonBlocks = await page.$$eval('script[type="application/ld+json"]', (nodes) => {
       const out = [];
       for (const n of nodes) {
         const txt = n?.textContent?.trim();
         if (!txt) continue;
-        try { out.push(JSON.parse(txt)); } catch { /* ignore */ }
+        try { out.push(JSON.parse(txt)); } catch { /* ignore parse */ }
       }
       return out;
     });
 
     const hotelInfo = pickHotelNode(jsonBlocks);
     if (hotelInfo) {
-      log.info(`Hotel JSON-LD found: ${hotelInfo.name ?? '(no name)'}`);
+      log.info(`Hotel JSON-LD: ${hotelInfo.name ?? '(no name)'}`);
     } else {
-      log.warning(`No hotel JSON-LD found @ ${finalUrl}`);
+      log.warning(`No hotel JSON-LD @ ${finalUrl}`);
     }
 
     await Dataset.pushData({
@@ -127,7 +130,7 @@ const crawler = new PlaywrightCrawler({
       error: hotelInfo ? null : 'no-hotel-jsonld',
     });
 
-    // jitter
+    // polite jitter
     const delay = rand(delayMsMin, delayMsMax);
     await sleep(delay);
   },
@@ -144,7 +147,7 @@ const crawler = new PlaywrightCrawler({
   },
 });
 
-// preserve orig short URL
+// Preserve original short URL (so Supabase ingest can parse marsha_code)
 const startRequests = startUrls.map((r) => ({
   url: r.url,
   userData: { origUrl: r.url },
@@ -152,7 +155,7 @@ const startRequests = startUrls.map((r) => ({
 
 await crawler.run(startRequests);
 
-// Stats
+// Summarise
 const { items } = await Dataset.getData();
 const successes = items.filter((i) => i.hotelInfo).length;
 const failures = items.filter((i) => !i.hotelInfo && !i.type).length;
