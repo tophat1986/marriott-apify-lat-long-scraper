@@ -9,13 +9,6 @@ import { router } from './routes.js';
 
 await Actor.init(); // Initialize Apify Actor before using any Actor methods
 
-log.info('Actor:', Actor);
-log.info('Actor.log:', Actor.log);
-log.info('Actor.getInput:', Actor.getInput);
-
-puppeteer.use(StealthPlugin());
-
-const input = await Actor.getInput();
 log.info('Received input:', input);
 
 let urls = [];
