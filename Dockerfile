@@ -4,7 +4,7 @@ RUN npm ls --depth=0 apify crawlee playwright || true
 
 COPY --chown=myuser package*.json ./
 
-# IMPORTANT: don't omit optional (impit native)
+# install prod deps (keep optionals so impit builds)
 RUN npm --quiet set progress=false \
     && npm ci --omit=dev \
     && echo "Installed NPM packages:" \
@@ -13,11 +13,10 @@ RUN npm --quiet set progress=false \
     && echo "NPM version:" && npm --version \
     && rm -r ~/.npm
 
-# Fetch Camoufox stealth browser assets (non-interactive)
-# Use --yes to auto-accept; --all to fetch all browsers, or --firefox only.
-RUN npx camoufox fetch --yes --firefox
+# ensure a writable cache directory for Camoufox downloads
+ENV CAMOUFOX_CACHE_DIR=/home/myuser/.camoufox
+RUN mkdir -p $CAMOUFOX_CACHE_DIR && chown myuser:myuser $CAMOUFOX_CACHE_DIR
 
-# Copy source
 COPY --chown=myuser . ./
 
 CMD npm start --silent
