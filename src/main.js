@@ -11,6 +11,46 @@ import fs from 'fs';
 // ---- helpers ----
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rand = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
+
+// User agent, viewport, timezone, and language pools
+const USER_AGENTS = [
+  // Desktop Chrome
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  // Desktop Firefox
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0) Gecko/20100101 Firefox/126.0',
+  // Desktop Edge
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36 Edg/124.0.0.0',
+  // Mobile Chrome
+  'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+  // Mobile Safari
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+];
+const VIEWPORTS = [
+  { width: 1920, height: 1080 }, // Desktop
+  { width: 1366, height: 768 }, // Desktop
+  { width: 390, height: 844 },  // iPhone 12/13/14
+  { width: 412, height: 915 },  // Pixel 6
+];
+const TIMEZONES = [
+  'America/New_York',
+  'America/Los_Angeles',
+  'Europe/London',
+  'Europe/Paris',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+];
+const LOCALES = [
+  'en-US',
+  'en-GB',
+  'fr-FR',
+  'de-DE',
+  'es-ES',
+];
+
+function pickRandom(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function pickHotelNode(blocks) {
   if (!Array.isArray(blocks)) return null;
   for (const b of blocks) {
@@ -89,7 +129,35 @@ const crawler = new PlaywrightCrawler({
 
   // Let Marriott run its JS fully; we block only heavy media, not styles/scripts.
   preNavigationHooks: [
-    async ({ page }, gotoOptions) => {
+    async ({ page, request }, gotoOptions) => {
+      // Proxy rotation: get a new proxy URL for each request
+      const newProxyUrl = await proxyConfiguration.newUrl();
+      // (Camoufox handles proxy via launchOptions, so this is a placeholder for future per-request proxy logic if needed)
+      // User agent rotation
+      const userAgent = pickRandom(USER_AGENTS);
+      await page.setUserAgent(userAgent);
+      // Viewport randomization
+      const viewport = pickRandom(VIEWPORTS);
+      await page.setViewportSize(viewport);
+      // Timezone randomization
+      const timezone = pickRandom(TIMEZONES);
+      await page.emulateTimezone(timezone);
+      // Language/locale randomization
+      const locale = pickRandom(LOCALES);
+      await page.emulateLocale(locale);
+      // Realistic headers
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': locale + ',en;q=0.9',
+        'Referer': 'https://www.google.com/',
+        'DNT': '1',
+      });
+      // Mobile emulation: if mobile user agent, set touch support
+      if (/Mobile|iPhone|Android/i.test(userAgent)) {
+        await page.emulateMedia({ colorScheme: 'light' });
+        // Optionally, set device scale factor for mobile
+        await page.setViewportSize({ width: viewport.width, height: viewport.height, deviceScaleFactor: 2 });
+      }
+      // Block only heavy media, not styles/scripts
       await page.route('**/*', (route) => {
         const type = route.request().resourceType();
         if (['image', 'font', 'media'].includes(type)) {
@@ -139,14 +207,44 @@ const crawler = new PlaywrightCrawler({
     await sleep(delay);
   },
 
-  failedRequestHandler({ request, error, log }) {
+  failedRequestHandler: async ({ request, page, error, log }) => {
     log.error(`Failed: ${request.url} :: ${error?.message ?? error}`);
-    Dataset.pushData({
-      url: request.userData?.origUrl ?? request.url,
-      finalUrl: request.url,
-      scrapedAt: new Date().toISOString(),
-      jsonLdData: [],
-      error: error?.message ?? 'failed-navigation',
+
+    // Only save screenshot and HTML if page is available (navigation may have failed before page was created)
+    if (page) {
+        const safeKey = request.url.replace(/[^a-z0-9]/gi, '_').toLowerCase().slice(0, 60); // Key must be <= 63 chars
+        const timestamp = Date.now();
+        const storeId = Actor.getEnv().defaultKeyValueStoreId;
+
+        try {
+            const screenshotBuffer = await page.screenshot();
+            const screenshotKey = `ERROR_SCREENSHOT_${safeKey}_${timestamp}`;
+            await Actor.setValue(screenshotKey, screenshotBuffer, { contentType: 'image/png' });
+            const screenshotUrl = `https://api.apify.com/v2/key-value-stores/${storeId}/records/${screenshotKey}`;
+            log.info(`Saved screenshot to Key-Value Store: ${screenshotKey}`);
+            log.info(`Screenshot URL: ${screenshotUrl}`);
+        } catch (e) {
+            log.warning(`Could not save screenshot: ${e.message}`);
+        }
+
+        try {
+            const html = await page.content();
+            const htmlKey = `ERROR_HTML_${safeKey}_${timestamp}`;
+            await Actor.setValue(htmlKey, html, { contentType: 'text/html' });
+            const htmlUrl = `https://api.apify.com/v2/key-value-stores/${storeId}/records/${htmlKey}`;
+            log.info(`Saved HTML to Key-Value Store: ${htmlKey}`);
+            log.info(`HTML URL: ${htmlUrl}`);
+        } catch (e) {
+            log.warning(`Could not save HTML: ${e.message}`);
+        }
+    }
+
+    await Dataset.pushData({
+        url: request.userData?.origUrl ?? request.url,
+        finalUrl: request.url,
+        scrapedAt: new Date().toISOString(),
+        jsonLdData: [],
+        error: error?.message ?? 'failed-navigation',
     }).catch(() => {});
   },
 });
