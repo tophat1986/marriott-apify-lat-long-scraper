@@ -8,7 +8,7 @@ router.addDefaultHandler(async ({ page, request, log }) => {
         await page.goto(request.url, { waitUntil: 'networkidle0', timeout: 30000 }); // 30 seconds
     } catch (err) {
         log.error(`Failed to navigate: ${err.message}`);
-        return;
+        throw err; // Ensure failedRequestHandler is triggered
     }
     let ldJson;
     try {
@@ -25,7 +25,7 @@ router.addDefaultHandler(async ({ page, request, log }) => {
         });
     } catch (err) {
         log.error('Could not find or parse ld+json:', err);
-        return;
+        throw err; // Ensure failedRequestHandler is triggered
     }
     if (!ldJson) {
         log.warning('No suitable ld+json block found.');
@@ -57,6 +57,11 @@ router.addDefaultHandler(async ({ page, request, log }) => {
             log.warning(`Missing field: ${key}`);
         }
     }
-    await Dataset.pushData(record);
-    log.info('Record pushed to dataset.');
+    try {
+        await Dataset.pushData(record);
+        log.info('Record pushed to dataset.');
+    } catch (err) {
+        log.error('Failed to push data to dataset:', err);
+        throw err;
+    }
 });
