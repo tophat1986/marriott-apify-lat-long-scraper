@@ -1,7 +1,5 @@
 /**
- * Marriott JSON-LD scraper (Camoufox + PlaywrightCrawler + Apify Proxy RESIDENTIAL).
- * - Input: { startUrls: [{url: ...}, ...] }
- * - Output rows: { url, finalUrl, scrapedAt, jsonLdData, hotelInfo, error }
+ * Marriott JSON-LD scraper (Camoufox stealth Firefox + PlaywrightCrawler + Apify Proxy).
  */
 
 import { Actor, log } from 'apify';
@@ -9,12 +7,9 @@ import { PlaywrightCrawler, Dataset } from 'crawlee';
 import { launchOptions as camoufoxLaunchOptions } from 'camoufox-js';
 import { firefox } from 'playwright';
 
-// ------------------------------------------------------------------
-// Small helpers
-// ------------------------------------------------------------------
+// ---- helpers ----
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const rand = (min, max) => min + Math.floor(Math.random() * (max - min + 1));
-
 function pickHotelNode(blocks) {
   if (!Array.isArray(blocks)) return null;
   for (const b of blocks) {
@@ -25,15 +20,12 @@ function pickHotelNode(blocks) {
   return null;
 }
 
-// ------------------------------------------------------------------
-// Main
-// ------------------------------------------------------------------
+// ---- main ----
 await Actor.init();
-
 const input = await Actor.getInput();
 log.info('input', input);
 
-// Extract start URLs (support simple string array or array of {url})
+// Parse startUrls (string[] or [{url}])
 let startUrls = [];
 if (Array.isArray(input?.startUrls) && input.startUrls.length) {
   startUrls = input.startUrls.map((r) => (typeof r === 'string' ? { url: r } : { url: r.url }));
@@ -46,54 +38,51 @@ if (!startUrls.length) {
   process.exit(0);
 }
 
-// Scrape knobs (all optional)
+// knobs
 const concurrency = Number(input?.concurrency) || 3;
-const navigationTimeoutSecs = Number(input?.navigationTimeoutSecs) || 35;
+const navigationTimeoutSecs = Number(input?.navigationTimeoutSecs) || 45;
 const requestHandlerTimeoutSecs = Number(input?.requestHandlerTimeoutSecs) || 10;
-const delayMsMin = Number(input?.delayMsMin) || 250;
-const delayMsMax = Number(input?.delayMsMax) || 900;
+const delayMsMin = Number(input?.delayMsMin) || 300;
+const delayMsMax = Number(input?.delayMsMax) || 1000;
 
-// Proxy (RESIDENTIAL group recommended)
+// proxy (residential)
 const proxyConfiguration = await Actor.createProxyConfiguration({
   groups: ['RESIDENTIAL'],
 });
 
-// Camoufox launch options
-// Each crawler browser launch gets a fresh proxy session (newUrl()).
-// If you want sticky session across all requests, call newUrl() once and reuse (see comment below).
+// Camoufox launch opts (points to cache populated at build)
+// We pass a sticky proxy session for the whole run; if you want rotation,
+// refactor to call proxyConfiguration.newUrl() per request in preNav.
+const proxyUrl = await proxyConfiguration.newUrl();
 const camouLaunch = await camoufoxLaunchOptions({
   headless: true,
-  proxy: await proxyConfiguration.newUrl(), // sticky for whole run; change to newUrl() in preNav to rotate
+  proxy: proxyUrl,
   geoip: true,
-  // fonts: ['Times New Roman'], // example custom Camoufox option
 });
 
 // Build crawler
 const crawler = new PlaywrightCrawler({
-  proxyConfiguration,
-  // Camoufox runs via Playwright's firefox launcher
+  proxyConfiguration,              // informs Crawlee, but Camoufox also handles proxy via launchOptions
   launchContext: {
     launcher: firefox,
-    launchOptions: camouLaunch, // stealth + proxy baked in
+    launchOptions: camouLaunch,    // includes stealth + proxy
   },
-
   maxConcurrency: concurrency,
   navigationTimeoutSecs,
   requestHandlerTimeoutSecs,
   maxRequestsPerCrawl: startUrls.length,
 
+  // Let Marriott run its JS fully; we block only heavy media, not styles/scripts.
   preNavigationHooks: [
     async ({ page }, gotoOptions) => {
-      // Block heavy assets (keep scripts so JSON-LD loads)
       await page.route('**/*', (route) => {
         const type = route.request().resourceType();
         if (['image', 'font', 'media'].includes(type)) {
           return route.abort();
         }
-        // keep stylesheets; Marriott sometimes gates JS behind CSS loads
         return route.continue();
       });
-      gotoOptions.waitUntil = 'domcontentloaded';
+      gotoOptions.waitUntil = 'load'; // full load → give WAF JS max chance
     },
   ],
 
@@ -101,15 +90,15 @@ const crawler = new PlaywrightCrawler({
     const origUrl = request.userData?.origUrl ?? request.url;
     const finalUrl = page.url();
 
-    // Wait flexibly in case JSON-LD injected late
-    await page.waitForSelector('script[type="application/ld+json"]', { timeout: 8000 }).catch(() => {});
+    // JSON-LD sometimes loads late; 15s budget
+    await page.waitForSelector('script[type="application/ld+json"]', { timeout: 15000 }).catch(() => {});
 
     const jsonBlocks = await page.$$eval('script[type="application/ld+json"]', (nodes) => {
       const out = [];
       for (const n of nodes) {
         const txt = n?.textContent?.trim();
         if (!txt) continue;
-        try { out.push(JSON.parse(txt)); } catch { /* ignore parse */ }
+        try { out.push(JSON.parse(txt)); } catch { /* ignore */ }
       }
       return out;
     });
@@ -130,7 +119,7 @@ const crawler = new PlaywrightCrawler({
       error: hotelInfo ? null : 'no-hotel-jsonld',
     });
 
-    // polite jitter
+    // throttle
     const delay = rand(delayMsMin, delayMsMax);
     await sleep(delay);
   },
@@ -147,7 +136,7 @@ const crawler = new PlaywrightCrawler({
   },
 });
 
-// Preserve original short URL (so Supabase ingest can parse marsha_code)
+// preserve orig marsha
 const startRequests = startUrls.map((r) => ({
   url: r.url,
   userData: { origUrl: r.url },
@@ -155,15 +144,11 @@ const startRequests = startUrls.map((r) => ({
 
 await crawler.run(startRequests);
 
-// Summarise
+// stats
 const { items } = await Dataset.getData();
 const successes = items.filter((i) => i.hotelInfo).length;
 const failures = items.filter((i) => !i.hotelInfo && !i.type).length;
-const stats = {
-  total_urls: startUrls.length,
-  successes,
-  failures,
-};
+const stats = { total_urls: startUrls.length, successes, failures };
 log.info('Run stats:', stats);
 await Actor.setValue('RUN-STATS', stats);
 await Dataset.pushData({ type: 'run-stats', ...stats });

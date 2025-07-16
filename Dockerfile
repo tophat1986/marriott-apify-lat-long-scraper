@@ -4,7 +4,7 @@ RUN npm ls --depth=0 apify crawlee playwright || true
 
 COPY --chown=myuser package*.json ./
 
-# install prod deps (keep optionals so impit builds)
+# Install prod deps (keep optional!)
 RUN npm --quiet set progress=false \
     && npm ci --omit=dev \
     && echo "Installed NPM packages:" \
@@ -13,9 +13,14 @@ RUN npm --quiet set progress=false \
     && echo "NPM version:" && npm --version \
     && rm -r ~/.npm
 
-# ensure a writable cache directory for Camoufox downloads
-ENV CAMOUFOX_CACHE_DIR=/home/myuser/.camoufox
+# Pre-create writable Camoufox cache dir
+ENV CAMOUFOX_CACHE_DIR=/home/myuser/.cache/camoufox
 RUN mkdir -p $CAMOUFOX_CACHE_DIR && chown myuser:myuser $CAMOUFOX_CACHE_DIR
+
+# Fetch Camoufox browser bundle non-interactively.
+# The CLI prompts; piping "y" accepts defaults. The fetch may download ~hundreds MB on first build.
+# Remove `--firefox` because not supported in your CLI; default fetch includes core stealth build.
+RUN yes | npx camoufox fetch
 
 COPY --chown=myuser . ./
 

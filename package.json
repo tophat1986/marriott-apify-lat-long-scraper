@@ -7,7 +7,8 @@
         "apify": "^3.4.3",
         "crawlee": "^3.13.10",
         "playwright": "^1.48.2",
-        "camoufox-js": "^0.3.5"
+        "camoufox": "^0.1.7",        // CLI
+        "camoufox-js": "^0.3.5"      // JS helper (adjust to current if newer)
     },
     "devDependencies": {
       "@apify/eslint-config": "^1.0.0",
