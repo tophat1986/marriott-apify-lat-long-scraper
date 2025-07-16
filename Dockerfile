@@ -1,14 +1,13 @@
-# Playwright + Chrome base image (Node 22)
-FROM apify/actor-node-playwright-chrome:22-24.11.1
+# Known-good base you were using before
+FROM apify/actor-node-puppeteer-chrome:22-24.11.1
 
-# Show preinstalled core libs (optional diagnostic)
-RUN npm ls --depth=0 apify crawlee playwright || true
+# Show preinstalled libs (optional)
+RUN npm ls --depth=0 apify crawlee puppeteer || true
 
-# Workdir is /usr/src/app in Apify base images; user=myuser is set
-# Copy package manifests early to leverage Docker layer cache
+# Copy package manifests first (for layer cache)
 COPY --chown=myuser package*.json ./
 
-# Install production deps
+# Install prod deps
 RUN npm --quiet set progress=false \
     && npm ci --omit=dev --omit=optional \
     && echo "Installed NPM packages:" \
@@ -17,12 +16,12 @@ RUN npm --quiet set progress=false \
     && echo "NPM version:" && npm --version \
     && rm -r ~/.npm
 
-# Copy source after deps
+# Install Playwright browser binaries + any missing OS deps
+# (chromium only; reduces size vs full suite)
+RUN npx playwright install --with-deps chromium
+
+# Copy source
 COPY --chown=myuser . ./
 
-# (Optional) ensure Playwright has needed browser deps; usually already present.
-# Uncomment if you add additional Playwright browsers.
-# RUN npx playwright install --with-deps chromium
-
-# Start
+# Run
 CMD npm start --silent
