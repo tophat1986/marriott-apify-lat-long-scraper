@@ -60,9 +60,9 @@ crawler = new PuppeteerCrawler({
     },
     maxRequestsPerCrawl: urls.length,
     maxConcurrency,
-    handlePageTimeoutSecs: 30,
     maxRequestRetries: 1,
     navigationTimeoutSecs: 30,
+    requestHandlerTimeoutSecs: 30,
     launchContext: {
         launcher: puppeteer,
         launchOptions: {
