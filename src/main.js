@@ -1,5 +1,5 @@
 // Apify SDK - toolkit for building Apify Actors (Read more at https://docs.apify.com/sdk/js/).
-import { Actor } from 'apify';
+import { Actor, log } from 'apify';
 
 // Web scraping and browser automation library (Read more at https://crawlee.dev)
 import { PuppeteerCrawler } from 'crawlee';
@@ -9,10 +9,14 @@ import { router } from './routes.js';
 
 await Actor.init(); // Initialize Apify Actor before using any Actor methods
 
+log.info('Actor:', Actor);
+log.info('Actor.log:', Actor.log);
+log.info('Actor.getInput:', Actor.getInput);
+
 puppeteer.use(StealthPlugin());
 
 const input = await Actor.getInput();
-Actor.log.info('Received input:', input);
+log.info('Received input:', input);
 
 let urls = [];
 if (Array.isArray(input?.startUrls) && input.startUrls.length > 0) {
@@ -22,11 +26,11 @@ if (Array.isArray(input?.startUrls) && input.startUrls.length > 0) {
 }
 
 // Log the parsed URLs for debugging
-Actor.log.info('Parsed URLs:', urls);
+log.info('Parsed URLs:', urls);
 
 // Validate URLs before proceeding
 if (urls.length === 0 || urls.some(url => typeof url !== 'string' || !/^https?:\/\//.test(url))) {
-    Actor.log.error('Invalid or missing URLs in input:', urls);
+    log.error('Invalid or missing URLs in input:', urls);
     throw new Error('Input must have a "url" string property or a "startUrls" array with at least one object containing a valid "url".');
 }
 const maxConcurrency = Math.min(5, urls.length);
@@ -128,13 +132,13 @@ const stats = {
     failures: failedCount,
     run_duration_seconds: runDuration
 };
-Actor.log.info('Run stats:', stats);
+log.info('Run stats:', stats);
 await Actor.setValue('RUN-STATS', stats);
 await Actor.pushData({ type: 'run-stats', ...stats });
 
 if (urls.length > 0 && failedCount / urls.length > 0.5) {
     const msg = `High failure rate detected: ${(failedCount / urls.length * 100).toFixed(1)}% failures.`;
-    Actor.log.warning(msg);
+    log.warning(msg);
     await Actor.setValue('BACKOFF-FLAG', { flagged: true, message: msg, stats });
     await Actor.pushData({ type: 'backoff-flag', flagged: true, message: msg, stats });
 }
