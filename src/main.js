@@ -10,14 +10,22 @@ import { router } from './routes.js';
 puppeteer.use(StealthPlugin());
 
 const input = await Actor.getInput();
+Actor.log.info('Received input:', input);
+
 let urls = [];
 if (Array.isArray(input?.startUrls) && input.startUrls.length > 0) {
     urls = input.startUrls.map(obj => obj.url).filter(Boolean);
 } else if (input?.url) {
     urls = [input.url];
 }
-if (urls.length === 0) {
-    throw new Error('Input must have a "url" string property or a "startUrls" array with at least one object containing a "url".');
+
+// Log the parsed URLs for debugging
+Actor.log.info('Parsed URLs:', urls);
+
+// Validate URLs before proceeding
+if (urls.length === 0 || urls.some(url => typeof url !== 'string' || !/^https?:\/\//.test(url))) {
+    Actor.log.error('Invalid or missing URLs in input:', urls);
+    throw new Error('Input must have a "url" string property or a "startUrls" array with at least one object containing a valid "url".');
 }
 const maxConcurrency = Math.min(5, urls.length);
 
