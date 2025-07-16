@@ -1,5 +1,5 @@
 // Apify SDK - toolkit for building Apify Actors (Read more at https://docs.apify.com/sdk/js/).
-import Actor from 'apify';
+import * as Actor from 'apify';
 
 // Health check: HEAD request to a known Marriott page before any heavy imports/instantiation
 await (async () => {
@@ -16,7 +16,7 @@ await (async () => {
         Actor.log.info('Health check passed: Marriott site is reachable.');
     } catch (err) {
         Actor.log.error('Site unreachable, aborting run:', err.message);
-        await Actor.exit();
+        process.exit(0);
     }
 })();
 
