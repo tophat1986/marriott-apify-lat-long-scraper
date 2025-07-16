@@ -63,8 +63,8 @@ const crawler = new PlaywrightCrawler({
 
   // Set UA & headers at context creation (Playwright way)
   launchContext: {
-    launchOptions: { headless: true }, // channel auto; Chromium from image
-    browserContextOptions: {
+    launchOptions: { headless: true }, // Chromium bundled in base image
+    contextOptions: {
       userAgent: USER_AGENT,
       locale: 'en-US',
       extraHTTPHeaders: {
