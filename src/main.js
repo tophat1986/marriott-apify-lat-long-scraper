@@ -1,5 +1,5 @@
 // Apify SDK - toolkit for building Apify Actors (Read more at https://docs.apify.com/sdk/js/).
-import { Actor, utils } from 'apify';
+import Actor from 'apify';
 // Web scraping and browser automation library (Read more at https://crawlee.dev)
 import { PuppeteerCrawler } from 'crawlee';
 import puppeteer from 'puppeteer-extra';
@@ -104,7 +104,7 @@ const crawler = new PuppeteerCrawler({
 // Run-level health check: HEAD request to a known Marriott page
 const healthCheckUrl = 'https://www.marriott.com/';
 try {
-    const response = await utils.requestAsBrowser({
+    const response = await Actor.utils.requestAsBrowser({
         url: healthCheckUrl,
         method: 'HEAD',
         timeoutSecs: 5,
