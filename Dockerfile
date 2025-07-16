@@ -1,12 +1,10 @@
 FROM apify/actor-node-playwright:22
 
-# Inspect preinstalled libs (optional)
 RUN npm ls --depth=0 apify crawlee playwright || true
 
-# Copy manifests
 COPY --chown=myuser package*.json ./
 
-# Install prod deps
+# IMPORTANT: don't omit optional (impit native)
 RUN npm --quiet set progress=false \
     && npm ci --omit=dev \
     && echo "Installed NPM packages:" \
@@ -15,8 +13,11 @@ RUN npm --quiet set progress=false \
     && echo "NPM version:" && npm --version \
     && rm -r ~/.npm
 
+# Fetch Camoufox stealth browser assets (non-interactive)
+# Use --yes to auto-accept; --all to fetch all browsers, or --firefox only.
+RUN npx camoufox fetch --yes --firefox
+
 # Copy source
 COPY --chown=myuser . ./
 
-# Start actor
 CMD npm start --silent
